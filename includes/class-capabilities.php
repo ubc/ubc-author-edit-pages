@@ -61,6 +61,7 @@ class Capabilities {
 	 * and control what pages authors can see and edit.
 	 *
 	 * @since    1.0.0
+	 * @return   Capabilities    The instance of this class.
 	 */
 	public function run() {
 		// Add filter to allow authors to edit their own pages.
@@ -76,6 +77,20 @@ class Capabilities {
 		// Filter the pages list to only show the author's own pages.
 		// This ensures authors only see pages they are allowed to edit in the admin.
 		add_filter( 'pre_get_posts', array( $this, 'filter_pages_for_author' ) );
+
+		return $this; // Return instance for method chaining. Makes testing a little easier.
+	}
+
+	/**
+	 * Get a role by name.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    string $role_name    The role name.
+	 * @return   \WP_Role|null        The role object or null.
+	 */
+	protected function get_role( $role_name ) {
+		return get_role( $role_name );
 	}
 
 	/**
@@ -90,7 +105,7 @@ class Capabilities {
 		$this->logger->info( 'Activating plugin...', true );
 
 		// Get the author role.
-		$role = get_role( 'author' );
+		$role = $this->get_role( 'author' );
 
 		// Add the necessary capabilities to the author role.
 		if ( $role ) {
@@ -124,7 +139,7 @@ class Capabilities {
 		$this->logger->info( 'Deactivating plugin...', true );
 
 		// Get the author role.
-		$role = get_role( 'author' );
+		$role = $this->get_role( 'author' );
 
 		// Remove the capabilities from the author role.
 		if ( $role ) {
@@ -136,6 +151,162 @@ class Capabilities {
 		} else {
 			$this->logger->error( 'Author role not found.' );
 		}
+	}
+
+	/**
+	 * Check if a user has the author role.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    \WP_User|false $user    The user object to check.
+	 * @return   boolean                 True if the user is an author, false otherwise.
+	 */
+	protected function is_user_author( $user ) {
+		return $user && in_array( 'author', (array) $user->roles, true );
+	}
+
+	/**
+	 * Check if the capability is related to page editing.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    string $cap    The capability to check.
+	 * @return   boolean        True if the capability is related to page editing, false otherwise.
+	 */
+	protected function is_page_edit_capability( $cap ) {
+		$page_caps = array(
+			'edit_page',             // Direct edit capability for a page.
+			'edit_post',             // Generic edit capability (works for pages too).
+			'publish_page',          // Ability to publish a specific page.
+			'publish_pages',         // Ability to publish pages in general.
+			'edit_published_pages',  // Ability to edit already published pages.
+			'edit_published_page',   // Ability to edit a specific published page.
+		);
+
+		return in_array( $cap, $page_caps, true );
+	}
+
+	/**
+	 * Check if this is an attempt to create a new page.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    array $args    The arguments passed to the capability check.
+	 * @return   boolean        True if this is a new page creation attempt, false otherwise.
+	 */
+	protected function is_new_page_creation_attempt( $args ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		return isset( $args[0] ) && 'publish_pages' === $args[0] &&
+			isset( $_POST['action'] ) && 'editpost' === $_POST['action'] &&
+			isset( $_POST['original_post_status'] ) && 'auto-draft' === $_POST['original_post_status'];
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+	}
+
+	/**
+	 * Get a user by ID.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    int $user_id    The user ID.
+	 * @return   \WP_User|false  The user object or false.
+	 */
+	protected function get_user( $user_id ) {
+		return get_userdata( $user_id );
+	}
+
+	/**
+	 * Get a post by ID.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    int $post_id    The post ID.
+	 * @return   \WP_Post|null   The post object or null.
+	 */
+	protected function get_post( $post_id ) {
+		return get_post( $post_id );
+	}
+
+	/**
+	 * Get the current user.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @return   \WP_User    The current user.
+	 */
+	protected function get_current_user() {
+		return wp_get_current_user();
+	}
+
+	/**
+	 * Get a value from the GET superglobal.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @param    string $key      The key to get from the GET superglobal.
+	 * @param    mixed  $default  The default value to return if the key doesn't exist.
+	 * @return   mixed            The value from the GET superglobal or the default.
+	 */
+	protected function get_request_var( $key, $default = null ) {
+		if ( ! isset( $_GET[ $key ] ) ) {
+			return $default;
+		}
+
+		// Unslash and sanitize the input.
+		return sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
+	}
+
+	/**
+	 * Get the current admin page.
+	 *
+	 * @since    1.0.0
+	 * @access   protected
+	 * @return   string    The current admin page.
+	 */
+	protected function get_current_admin_page() {
+		global $pagenow;
+		return $pagenow;
+	}
+
+	/**
+	 * Filter the pages list to only show the author's own pages.
+	 *
+	 * This function ensures that when an author views the Pages list in the admin,
+	 * they only see pages where they are the author. This provides a cleaner UI
+	 * and reinforces the restriction that authors can only edit their own pages.
+	 *
+	 * @since    1.0.0
+	 * @param    \WP_Query $query    The WP_Query instance being filtered.
+	 * @return   \WP_Query           The filtered query.
+	 */
+	public function filter_pages_for_author( $query ) {
+		// Only apply this filter in the admin area for the pages list.
+		// We only want to modify the query on the edit.php page in the admin.
+		if ( ! is_admin() || 'edit.php' !== $this->get_current_admin_page() || ! $query->is_main_query() ) {
+			return $query;
+		}
+
+		// Only apply to page post type.
+		// We only want to modify queries for pages, not other post types.
+		if ( 'page' === $this->get_request_var( 'post_type' ) ) {
+			// Get the current user.
+			$user = $this->get_current_user();
+
+			// If the user is an author, restrict to their own pages.
+			// This ensures authors only see pages they are allowed to edit.
+			if ( $this->is_user_author( $user ) ) {
+				// Only modify if not already filtered by author.
+				// This prevents overriding an explicit author filter.
+				if ( null === $this->get_request_var( 'author' ) ) {
+					// Set the author parameter to the current user's ID.
+					// This restricts the query to only show pages by this author.
+					$query->set( 'author', $user->ID );
+					$this->logger->info( "Filtering pages list to show only pages authored by user {$user->ID}.", true );
+				}
+			}
+		}
+
+		// Return the modified query.
+		return $query;
 	}
 
 	/**
@@ -165,32 +336,21 @@ class Capabilities {
 	 */
 	public function filter_map_meta_cap( $caps, $cap, $user_id, $args ) {
 		// Get the user object.
-		$user = get_userdata( $user_id );
+		$user = $this->get_user( $user_id );
 
 		// If the user is not an author, return the original capabilities.
 		// This ensures we only modify behavior for authors.
-		if ( ! $user || ! in_array( 'author', $user->roles, true ) ) {
+		if ( ! $this->is_user_author( $user ) ) {
 			return $caps;
 		}
-
-		// List of capabilities we want to handle for authors.
-		// These are meta capabilities related to editing pages.
-		$page_caps = array(
-			'edit_page',             // Direct edit capability for a page.
-			'edit_post',             // Generic edit capability (works for pages too).
-			'publish_page',          // Ability to publish a specific page.
-			'publish_pages',         // Ability to publish pages in general.
-			'edit_published_pages',  // Ability to edit already published pages.
-			'edit_published_page',   // Ability to edit a specific published page.
-		);
 
 		// Handle capabilities for pages.
 		// We only want to modify the behavior if:
 		// 1. The capability being checked is in our list of page-related capabilities
 		// 2. We have an object ID to check against (the page ID).
-		if ( in_array( $cap, $page_caps, true ) && isset( $args[0] ) ) {
+		if ( $this->is_page_edit_capability( $cap ) && isset( $args[0] ) ) {
 			$page_id = $args[0];
-			$page    = get_post( $page_id );
+			$page    = $this->get_post( $page_id );
 
 			// If the page doesn't exist, return the original capabilities.
 			// This is a safety check to prevent errors.
@@ -252,12 +412,12 @@ class Capabilities {
 		// If $user is not provided, get the user from args.
 		// This ensures we always have a user object to work with.
 		if ( null === $user && isset( $args[1] ) ) {
-			$user = get_userdata( $args[1] );
+			$user = $this->get_user( $args[1] );
 		}
 
 		// If the user is not an author, return the original capabilities.
 		// This ensures we only modify behavior for authors.
-		if ( ! $user || ! in_array( 'author', (array) $user->roles, true ) ) {
+		if ( ! $this->is_user_author( $user ) ) {
 			return $allcaps;
 		}
 
@@ -277,7 +437,7 @@ class Capabilities {
 		// args[2] contains the object ID (page ID) if this is a check for a specific page.
 		if ( isset( $args[2] ) ) {
 			$page_id = $args[2];
-			$page    = get_post( $page_id );
+			$page    = $this->get_post( $page_id );
 
 			// If it's a page and the user is the author, grant all necessary capabilities.
 			if ( $page && 'page' === $page->post_type && $page->post_author == $user->ID ) {
@@ -309,15 +469,11 @@ class Capabilities {
 		// Explicitly prevent the capability to add new pages.
 		// We need to check POST data, but this is a capability check, not form processing.
 		// This specifically targets the case where an author tries to create a new page.
-		// phpcs:disable WordPress.Security.NonceVerification.Missing
-		if ( isset( $args[0] ) && 'publish_pages' === $args[0] &&
-			isset( $_POST['action'] ) && 'editpost' === $_POST['action'] &&
-			isset( $_POST['original_post_status'] ) && 'auto-draft' === $_POST['original_post_status'] ) {
+		if ( $this->is_new_page_creation_attempt( $args ) ) {
 			// If this is a request to publish a new page (auto-draft), deny it.
 			$allcaps['publish_pages'] = false;
 			$this->logger->info( "Preventing author {$user->ID} from creating a new page.", true );
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 		// Prevent authors from deleting pages.
 		// These capabilities control the ability to delete pages.
@@ -326,49 +482,5 @@ class Capabilities {
 
 		// Return the modified capabilities.
 		return $allcaps;
-	}
-
-	/**
-	 * Filter the pages list to only show the author's own pages.
-	 *
-	 * This function ensures that when an author views the Pages list in the admin,
-	 * they only see pages where they are the author. This provides a cleaner UI
-	 * and reinforces the restriction that authors can only edit their own pages.
-	 *
-	 * @since    1.0.0
-	 * @param    \WP_Query $query    The WP_Query instance being filtered.
-	 * @return   \WP_Query           The filtered query.
-	 */
-	public function filter_pages_for_author( $query ) {
-		global $pagenow;
-
-		// Only apply this filter in the admin area for the pages list.
-		// We only want to modify the query on the edit.php page in the admin.
-		if ( ! is_admin() || 'edit.php' !== $pagenow || ! $query->is_main_query() ) {
-			return $query;
-		}
-
-		// Only apply to page post type.
-		// We only want to modify queries for pages, not other post types.
-		if ( isset( $_GET['post_type'] ) && 'page' === $_GET['post_type'] ) {
-			// Get the current user.
-			$user = wp_get_current_user();
-
-			// If the user is an author, restrict to their own pages.
-			// This ensures authors only see pages they are allowed to edit.
-			if ( in_array( 'author', (array) $user->roles, true ) ) {
-				// Only modify if not already filtered by author.
-				// This prevents overriding an explicit author filter.
-				if ( ! isset( $_GET['author'] ) ) {
-					// Set the author parameter to the current user's ID.
-					// This restricts the query to only show pages by this author.
-					$query->set( 'author', $user->ID );
-					$this->logger->info( "Filtering pages list to show only pages authored by user {$user->ID}.", true );
-				}
-			}
-		}
-
-		// Return the modified query.
-		return $query;
 	}
 }
