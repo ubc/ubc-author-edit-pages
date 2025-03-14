@@ -9,7 +9,6 @@ By default, WordPress authors can create, edit, and delete their own posts, but 
 ### Key Features
 
 -   Authors can edit pages where they are marked as the page author
--   Authors cannot publish pages (only edit them)
 -   Authors cannot create new pages
 -   Authors cannot delete pages
 -   Authors can only edit their own pages (pages where they are the author)
@@ -28,7 +27,7 @@ By default, WordPress authors can create, edit, and delete their own posts, but 
 2. The author will now be able to edit that page
 3. The author will see the "Pages" menu in the admin dashboard
 4. The author will only see pages where they are the author in the pages list
-5. The author will not be able to create new pages, publish pages, or delete pages
+5. The author will not be able to create new pages or delete pages
 
 ## Technical Details
 
@@ -83,9 +82,9 @@ The plugin integrates with WordPress in a non-intrusive way:
 
 No, authors can only edit existing pages where they have been assigned as the author.
 
-### Can authors publish pages?
+### Can authors publish draft pages that are assigned to them?
 
-Authors can save changes to existing published pages, but they cannot publish new pages.
+Yes, if you create a draft page (but don't publish it) and assign a user with the role of author to that page, the author user will be able to edit and then publish that page.
 
 ### Can authors delete pages?
 
@@ -93,7 +92,7 @@ No, authors cannot delete pages.
 
 ### Does this plugin work in a multisite environment?
 
-Yes, the plugin works in a multisite environment. It can be activated on individual sites as needed.
+Yes, the plugin works in a multisite environment. It can be activated on individual sites as needed. There are no network settings (or settings of any kind).
 
 ### How does the plugin prevent authors from creating new pages?
 
